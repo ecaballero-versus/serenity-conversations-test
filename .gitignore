@@ -1,0 +1,10 @@
+# Credenciales
+.env
+
+# Entorno virtual y cachés
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Volcados de conversaciones reales (contienen datos personales)
+conversation_*.json
