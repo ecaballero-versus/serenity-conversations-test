@@ -1,20 +1,14 @@
 """Datos ficticios para la fase 0. Ningún dato procede de Serenity ni corresponde a alumnos reales.
 
-Los verticales son ejemplos: los valores definitivos están pendientes de acordar con IRICOM.
+Los códigos de agente son los reales (config/agents.yaml); conversaciones y alumnos son inventados.
 """
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from .models import Attachment, ConversationDetail, Message, MessageFeedback, Sender, Vertical
+from .agents import AGENTS
+from .models import Attachment, ConversationDetail, Message, MessageFeedback, Sender
 
 WELCOME_ID = UUID("00000000-0000-0000-0000-000000000000")
-
-VERTICALS = [
-    Vertical(code="idiomas", name="Idiomas"),
-    Vertical(code="marketing-digital", name="Marketing digital"),
-    Vertical(code="programacion", name="Programación"),
-    Vertical(code="sanidad", name="Sanidad"),
-]
 
 # Momento fijo de la última sincronización en los datos de ejemplo
 SYNCED_AT = datetime(2026, 11, 24, 10, 0, 0, tzinfo=timezone.utc)
@@ -24,7 +18,7 @@ def _dt(text: str) -> datetime:
     return datetime.fromisoformat(text).replace(tzinfo=timezone.utc)
 
 
-def _conversation(conv_id, email, vertical, title, open_, turns, start, welcome) -> tuple[str, ConversationDetail]:
+def _conversation(conv_id, email, agent_code, title, open_, turns, start, welcome) -> tuple[str, ConversationDetail]:
     """Construye una conversación a partir de turnos (pregunta, respuesta, feedback, adjuntos)."""
     t = _dt(start)
     messages = [Message(
@@ -46,8 +40,8 @@ def _conversation(conv_id, email, vertical, title, open_, turns, start, welcome)
             is_interruption=False, feedback=turn.get("feedback"),
         ))
     detail = ConversationDetail(
-        id=UUID(conv_id), vertical=vertical, title=title, start_date=messages[0].created_at,
-        end_date=messages[-1].created_at, open=open_, message_count=len(messages), messages=messages,
+        id=UUID(conv_id), agent_code=agent_code, vertical=AGENTS[agent_code], title=title, start_date=messages[0].created_at,
+        end_date=messages[-1].created_at, open=open_, student_email=email, message_count=len(messages), messages=messages,
         synced_at=SYNCED_AT, stale=False,
     )
     return email, detail
@@ -56,12 +50,12 @@ def _conversation(conv_id, email, vertical, title, open_, turns, start, welcome)
 _STUDENT_A = "alumna.ejemplo@example.com"
 _STUDENT_B = "alumno.demo@example.org"
 
-_WELCOME_IDIOMAS = "¡Hola! Soy tu tutor de idiomas. ¿En qué puedo ayudarte hoy?"
-_WELCOME_MARKETING = "¡Hola! Soy tu asistente de marketing digital. Cuéntame qué necesitas."
+_WELCOME_IDIOMAS = "¡Hola! Soy tu tutor. ¿En qué puedo ayudarte hoy?"
+_WELCOME_MARKETING = "¡Hola! Soy tu asistente. Cuéntame qué necesitas."
 
 _RAW = [
     _conversation(
-        "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c01", _STUDENT_A, "idiomas",
+        "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c01", _STUDENT_A, "OrquestaAYIIPP",
         "Diferencia entre present perfect y past simple", True,
         [
             {
@@ -83,7 +77,7 @@ _RAW = [
         "2026-11-24T09:10:00", _WELCOME_IDIOMAS,
     ),
     _conversation(
-        "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c02", _STUDENT_A, "idiomas",
+        "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c02", _STUDENT_A, "OrquestaAYIIPP",
         "Corrección de un email formal en inglés", False,
         [
             {
@@ -102,7 +96,7 @@ _RAW = [
         "2026-11-18T16:02:00", _WELCOME_IDIOMAS,
     ),
     _conversation(
-        "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c03", _STUDENT_A, "idiomas",
+        "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c03", _STUDENT_A, "OrquestaAYIIPP",
         "Vocabulario para una entrevista de trabajo", False,
         [
             {
@@ -122,7 +116,7 @@ _RAW = [
         "2026-11-10T11:30:00", _WELCOME_IDIOMAS,
     ),
     _conversation(
-        "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c04", _STUDENT_A, "marketing-digital",
+        "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c04", _STUDENT_A, "AgenteOrquestaGCIN",
         "Qué es el CTR y cómo mejorarlo", False,
         [
             {
@@ -134,7 +128,7 @@ _RAW = [
         "2026-11-20T08:45:00", _WELCOME_MARKETING,
     ),
     _conversation(
-        "7a1d9e44-2c3b-4f88-a5d6-0b9c8d7e6f01", _STUDENT_B, "idiomas",
+        "7a1d9e44-2c3b-4f88-a5d6-0b9c8d7e6f01", _STUDENT_B, "OrquestaAYIIPP",
         "Phrasal verbs con get", False,
         [
             {

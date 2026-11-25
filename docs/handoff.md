@@ -82,7 +82,9 @@ Parámetros del listado: `page`, `pageSize` (200 aceptado), `sortDirection` (`as
 
 Cada mensaje: `id`, `sender` (`bot`/`user`), `type` (`text`), `value` (Markdown), `createdAt`,
 `canceledByClient`, `isInterruption`, `attachedVolatileKnowledges`. El mensaje de bienvenida tiene
-siempre `id = 00000000-0000-0000-0000-000000000000` (un único mensaje así por conversación).
+siempre `id = 00000000-0000-0000-0000-000000000000`. **Corregido (24/11/2026):** no es el único; algún
+mensaje del bot sin id propio (posible aviso o error) también lo lleva, así que el id del mensaje no es
+único dentro de la conversación: la clave es (conversación, posición).
 
 ### Feedback
 
@@ -147,7 +149,11 @@ listado). Detalle a 3–5 peticiones por segundo, reduciendo ante 429. Invocacio
 ## Puntos abiertos
 
 - Lista de verticales y códigos de sus orquestadores; valores de `vertical` acordados con IRICOM.
-- Comprobar si el listado de Serenity trae `groupIdentifier` u otro campo con información de curso.
+- ~~Comprobar `groupIdentifier`~~: el listado lo trae, pero vacío en las 200 conversaciones más recientes de
+  `OrquestaAYIIPP` (24/11/2026). El listado sí trae `channel` (`FV IP` en el aula; `WebAppPreview` y
+  `Unspecified` en pruebas).
+- ~~Identificador del alumno~~: **decidido email + `agent_code`** (Jurispol tiene dos orquestadores,
+  entrada básica y ejecutiva). Pendiente de confirmar con IRICOM (entregable v1).
 - Plazo de conservación de las conversaciones (RGPD).
 - Ampliar la retención de los orquestadores en Serenity mientras no exista el volcado.
 - Herramienta de infraestructura como código para la fase 2 (Terraform o CDK).

@@ -8,3 +8,8 @@ __pycache__/
 
 # Volcados de conversaciones reales (contienen datos personales)
 conversation_*.json
+
+# Datos locales de ingesta (conversaciones reales)
+data/
+test_seerenity_agent.py
+deliverable-v1/

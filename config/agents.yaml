@@ -1,0 +1,23 @@
+# Orquestadores de Serenity y su vertical. Solo se sincronizan los que tienen sync_enabled: true.
+# retention_days: retención configurada en Serenity (null = desconocida).
+agents:
+  - agent_code: AgenteOrquestaPNEB
+    vertical: jurispol
+    description: Jurispol, entrada básica
+    sync_enabled: false
+    retention_days: null
+  - agent_code: AgenteOrquestaPNEE
+    vertical: jurispol
+    description: Jurispol, entrada ejecutiva
+    sync_enabled: false
+    retention_days: null
+  - agent_code: AgenteOrquestaGCIN
+    vertical: prefortia
+    description: Prefortia
+    sync_enabled: false
+    retention_days: null
+  - agent_code: OrquestaAYIIPP
+    vertical: ayudantes
+    description: Ayudantes
+    sync_enabled: true
+    retention_days: null

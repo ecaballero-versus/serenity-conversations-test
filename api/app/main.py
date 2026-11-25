@@ -10,6 +10,7 @@ from fastapi.openapi.utils import get_openapi
 from . import __version__, errors
 from .errors import PROBLEM_MEDIA_TYPE
 from .routes import RESPONSE_DOCS, router
+from .security import COGNITO_TOKEN_URL, mock_token_router
 
 DESCRIPTION = """
 API de solo lectura con el histórico de conversaciones de los alumnos con los agentes de Serenity Star.
@@ -21,7 +22,8 @@ OAuth2 *client credentials*. Todas las rutas, salvo `/v1/health`, requieren un t
 `conversations:read` en la cabecera `Authorization: Bearer <token>`.
 
 ## Identificación del alumno
-El alumno se identifica por **email + vertical**. El email se envía siempre en el cuerpo de la petición,
+El alumno se identifica por **email + código del agente orquestador** (`agent_code`). Una misma
+vertical puede tener varios orquestadores (p. ej. entrada básica y ejecutiva). El email se envía siempre en el cuerpo de la petición,
 nunca en la URL. Se compara sin distinguir mayúsculas y minúsculas.
 
 ## Convenciones
@@ -39,7 +41,6 @@ nunca en la URL. Se compara sin distinguir mayúsculas y minúsculas.
 
 TAGS = [
     {"name": "Conversaciones", "description": "Consulta de conversaciones de los alumnos."},
-    {"name": "Catálogo", "description": "Valores de referencia."},
     {"name": "Sistema", "description": "Estado del servicio."},
 ]
 
@@ -48,10 +49,23 @@ app = FastAPI(
     version=__version__,
     description=DESCRIPTION,
     openapi_tags=TAGS,
-    servers=[{"url": "https://api.example.com", "description": "Pendiente: dominio definitivo"}],
+    # Sin servers: Swagger UI (/docs) envía las peticiones al propio servidor local
 )
 errors.install(app)
 app.include_router(router)
+app.include_router(mock_token_router)
+
+# Valores de producción que solo lleva la especificación exportada para IRICOM
+EXPORT_SERVERS = [{"url": "https://api.example.com", "description": "Pendiente: dominio definitivo"}]
+
+
+def export_openapi() -> dict:
+    """Especificación para compartir: dominio de producción y endpoint de tokens de Cognito."""
+    spec = deepcopy(app.openapi())
+    spec["servers"] = EXPORT_SERVERS
+    flow = spec["components"]["securitySchemes"]["oauth2"]["flows"]["clientCredentials"]
+    flow["tokenUrl"] = COGNITO_TOKEN_URL
+    return spec
 
 
 def custom_openapi() -> dict:

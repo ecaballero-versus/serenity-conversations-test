@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
-from app.models import ConversationDetail, ConversationSearchResponse, Problem, VerticalList
+from app.main import app, export_openapi
+from app.models import ConversationDetail, ConversationSearchResponse, Problem
 
 client = TestClient(app)
 AUTH = {"Authorization": "Bearer token-de-prueba"}
@@ -16,7 +16,7 @@ SEARCH = "/v1/students/conversations/search"
 
 
 def search(**body):
-    return client.post(SEARCH, json={"email": STUDENT, "vertical": "idiomas", **body}, headers=AUTH)
+    return client.post(SEARCH, json={"email": STUDENT, "agent_code": "OrquestaAYIIPP", **body}, headers=AUTH)
 
 
 def assert_problem(response, status):
@@ -33,7 +33,7 @@ def test_health_sin_token():
     assert r.json()["status"] == "ok"
 
 
-@pytest.mark.parametrize("method,url", [("get", "/v1/verticals"), ("post", SEARCH),
+@pytest.mark.parametrize("method,url", [("post", SEARCH),
                                         ("get", f"/v1/conversations/{CONV_ID}")])
 def test_401_sin_token(method, url):
     r = getattr(client, method)(url)
@@ -42,16 +42,21 @@ def test_401_sin_token(method, url):
 
 
 def test_403_sin_scope():
-    assert_problem(client.get("/v1/verticals", headers={"Authorization": "Bearer token-sin-permiso"}), 403)
+    assert_problem(client.get(f"/v1/conversations/{CONV_ID}", headers={"Authorization": "Bearer token-sin-permiso"}), 403)
 
 
-def test_verticales():
-    data = VerticalList.model_validate(client.get("/v1/verticals", headers=AUTH).json())
-    assert "idiomas" in {v.code for v in data.items}
+def test_resultados_incluyen_agente_y_vertical():
+    item = search().json()["items"][0]
+    assert item["agent_code"] == "OrquestaAYIIPP" and item["vertical"] == "ayudantes"
+
+
+def test_otro_agente_del_mismo_alumno_no_se_mezcla():
+    r = client.post(SEARCH, json={"email": STUDENT, "agent_code": "AgenteOrquestaGCIN"}, headers=AUTH)
+    assert [c["agent_code"] for c in r.json()["items"]] == ["AgenteOrquestaGCIN"]
 
 
 def test_busqueda_normaliza_email_y_ordena():
-    r = client.post(SEARCH, json={"email": "Alumna.Ejemplo@Example.com", "vertical": "idiomas"}, headers=AUTH)
+    r = client.post(SEARCH, json={"email": "Alumna.Ejemplo@Example.com", "agent_code": "OrquestaAYIIPP"}, headers=AUTH)
     data = ConversationSearchResponse.model_validate(r.json())
     assert len(data.items) == 3
     assert [c.end_date for c in data.items] == sorted((c.end_date for c in data.items), reverse=True)
@@ -74,18 +79,19 @@ def test_filtros():
 
 
 def test_alumno_sin_conversaciones():
-    r = client.post(SEARCH, json={"email": "nadie@example.com", "vertical": "idiomas"}, headers=AUTH)
+    r = client.post(SEARCH, json={"email": "nadie@example.com", "agent_code": "OrquestaAYIIPP"}, headers=AUTH)
     assert r.status_code == 200
     assert r.json() == {"items": [], "next_cursor": None, "synced_at": None, "stale": False}
 
 
 @pytest.mark.parametrize("body,pointer", [
-    ({"email": "no-es-un-email", "vertical": "idiomas"}, "/email"),
-    ({"email": STUDENT, "vertical": "Idiomas"}, "/vertical"),
-    ({"email": STUDENT, "vertical": "idiomas", "limit": 500}, "/limit"),
-    ({"email": STUDENT, "vertical": "idiomas", "last_activity_from": "2026-11-20T00:00:00"},
+    ({"email": "no-es-un-email", "agent_code": "OrquestaAYIIPP"}, "/email"),
+    ({"email": STUDENT, "agent_code": "Orquesta AYIIPP"}, "/agent_code"),
+    ({"email": STUDENT}, "/agent_code"),
+    ({"email": STUDENT, "agent_code": "OrquestaAYIIPP", "limit": 500}, "/limit"),
+    ({"email": STUDENT, "agent_code": "OrquestaAYIIPP", "last_activity_from": "2026-11-20T00:00:00"},
      "/last_activity_from"),
-    ({"email": STUDENT, "vertical": "idiomas", "campo_desconocido": 1}, "/campo_desconocido"),
+    ({"email": STUDENT, "agent_code": "OrquestaAYIIPP", "campo_desconocido": 1}, "/campo_desconocido"),
 ])
 def test_422_validacion(body, pointer):
     problem = assert_problem(client.post(SEARCH, json=body, headers=AUTH), 422)
@@ -95,7 +101,7 @@ def test_422_validacion(body, pointer):
 
 
 def test_422_vertical_desconocida_y_cursor_invalido():
-    assert_problem(client.post(SEARCH, json={"email": STUDENT, "vertical": "inexistente"}, headers=AUTH), 422)
+    assert_problem(client.post(SEARCH, json={"email": STUDENT, "agent_code": "AgenteInexistente"}, headers=AUTH), 422)
     assert_problem(search(cursor="basura"), 422)
 
 
@@ -106,6 +112,7 @@ def test_detalle():
     assert [m.seq for m in data.messages] == list(range(len(data.messages)))
     assert all(m.feedback is None for m in data.messages if m.sender == "user")
     assert any(m.feedback and m.feedback.comment for m in data.messages)
+    assert data.student_email == STUDENT
 
 
 def test_fechas_utc_con_z():
@@ -147,4 +154,27 @@ def test_especificacion_exportada_al_dia():
     exported = Path(__file__).resolve().parent.parent / "openapi" / "openapi.json"
     if not exported.exists():
         pytest.skip("Ejecutar scripts/export_openapi.py")
-    assert json.loads(exported.read_text(encoding="utf-8")) == json.loads(json.dumps(app.openapi()))
+    assert json.loads(exported.read_text(encoding="utf-8")) == json.loads(json.dumps(export_openapi()))
+
+
+def test_docs_locales_apuntan_al_propio_servidor():
+    spec = app.openapi()
+    assert not spec.get("servers")
+    flow = spec["components"]["securitySchemes"]["oauth2"]["flows"]["clientCredentials"]
+    assert flow["tokenUrl"] == "/mock/oauth2/token"
+    assert "/mock/oauth2/token" not in spec["paths"]
+
+
+def test_exportada_con_valores_de_produccion():
+    spec = export_openapi()
+    assert spec["servers"][0]["url"].startswith("https://")
+    assert spec["components"]["securitySchemes"]["oauth2"]["flows"]["clientCredentials"]["tokenUrl"].startswith("https://")
+    assert not app.openapi().get("servers")  # exportar no modifica el esquema del servidor local
+
+
+def test_token_simulado_permite_llamar_a_la_api():
+    r = client.post("/mock/oauth2/token", data={"grant_type": "client_credentials", "client_id": "x",
+                                                "client_secret": "y"})
+    assert r.status_code == 200
+    token = r.json()["access_token"]
+    assert client.get(f"/v1/conversations/{CONV_ID}", headers={"Authorization": f"Bearer {token}"}).status_code == 200

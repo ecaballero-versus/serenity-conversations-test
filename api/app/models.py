@@ -20,33 +20,28 @@ from pydantic import (
     model_validator,
 )
 
-VerticalCode = Annotated[
+from .agents import AGENTS
+
+AgentCode = Annotated[
     str,
     Field(
         min_length=1,
-        max_length=50,
-        pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$",
-        description="Código de la vertical (slug en minúsculas). Los valores válidos se obtienen de "
-        "`GET /v1/verticals`.",
-        examples=["idiomas"],
+        max_length=100,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="Código del agente orquestador de Serenity (distingue mayúsculas y minúsculas). Valores "
+        "actuales: " + ", ".join(f"`{code}` ({vertical})" for code, vertical in AGENTS.items()) + ".",
+        examples=["OrquestaAYIIPP"],
     ),
+]
+
+VerticalCode = Annotated[
+    str,
+    Field(description="Vertical a la que pertenece el orquestador. Informativo.", examples=["ayudantes"]),
 ]
 
 
 class ApiModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-# --- Catálogo -------------------------------------------------------------------------------------
-
-
-class Vertical(ApiModel):
-    code: VerticalCode
-    name: str = Field(description="Nombre legible de la vertical.", examples=["Idiomas"])
-
-
-class VerticalList(ApiModel):
-    items: list[Vertical]
 
 
 # --- Búsqueda de conversaciones de un alumno --------------------------------------------------
@@ -59,7 +54,7 @@ class ConversationSearchRequest(ApiModel):
         description="Email del alumno. Se compara sin distinguir mayúsculas y minúsculas.",
         examples=["alumna.ejemplo@example.com"],
     )
-    vertical: VerticalCode
+    agent_code: AgentCode
     last_activity_from: AwareDatetime | None = Field(
         default=None,
         description="Solo conversaciones cuya última actividad (`end_date`) es igual o posterior a "
@@ -107,6 +102,7 @@ class SyncInfo(ApiModel):
 
 class ConversationSummary(ApiModel):
     id: UUID
+    agent_code: AgentCode
     vertical: VerticalCode
     title: str | None = Field(
         description="Título generado automáticamente por Serenity (unos 50 caracteres como máximo)."
@@ -162,15 +158,16 @@ class MessageFeedback(ApiModel):
 
 class Message(ApiModel):
     id: UUID = Field(
-        description="Identificador del mensaje. El de bienvenida es siempre "
-        "`00000000-0000-0000-0000-000000000000`: úsese junto con el id de la conversación."
+        description="Identificador del mensaje en Serenity. **No es único**: la bienvenida y algunos mensajes del "
+        "agente sin identificador propio (p. ej. avisos) llevan `00000000-0000-0000-0000-000000000000`. Para "
+        "identificar un mensaje dentro de la conversación, úsese `seq`."
     )
     seq: int = Field(ge=0, description="Posición del mensaje en la conversación, empezando en 0.")
     sender: Sender = Field(description="`user`: el alumno; `bot`: el agente.")
     type: str = Field(description="Tipo de contenido. Hoy siempre `text`.", examples=["text"])
     content: str = Field(description="Contenido en Markdown. El aula debe renderizarlo.")
     created_at: datetime
-    is_welcome: bool = Field(description="`true` en el mensaje de bienvenida del agente.")
+    is_welcome: bool = Field(description="`true` en el mensaje de bienvenida del agente (siempre `seq = 0`).")
     canceled_by_client: bool = Field(description="El alumno canceló la generación de la respuesta.")
     is_interruption: bool = Field(description="El mensaje interrumpió una respuesta en curso.")
     attachments: list[Attachment] = Field(default_factory=list)
@@ -181,6 +178,11 @@ class Message(ApiModel):
 
 class ConversationDetail(SyncInfo, ConversationSummary):
     # Orden de bases: los campos de ConversationSummary aparecen primero en el esquema
+    student_email: str = Field(
+        description="Email del alumno, en minúsculas, tal como lo identifica Serenity. Las conversaciones de "
+        "pruebas de desarrollo tienen un identificador `apikey-user-…@serenitystar.ai`.",
+        examples=["alumna.ejemplo@example.com"],
+    )
     messages: list[Message] = Field(description="Mensajes en orden cronológico.")
 
 

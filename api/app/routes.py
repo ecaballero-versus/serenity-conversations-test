@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Body, HTTPException
 
 from . import __version__, mock_data
+from .agents import AGENTS
 from .errors import PROBLEM_BASE
 from .models import (
     ConversationDetail,
@@ -17,7 +18,6 @@ from .models import (
     ConversationSummary,
     Health,
     Problem,
-    VerticalList,
 )
 from .security import read_access
 
@@ -96,22 +96,10 @@ def health() -> Health:
     return Health(status="ok", version=__version__, time=datetime.now(timezone.utc))
 
 
-@router.get(
-    "/verticals", tags=["Catálogo"], operation_id="listVerticals", response_model=VerticalList,
-    dependencies=[read_access], summary="Verticales disponibles",
-    description="Valores válidos del campo `vertical`. Se añadirán verticales nuevas sin cambiar el contrato.",
-    responses=_documented("/verticals", "get", {
-        200: {"content": {"application/json": {"example": _dump(VerticalList(items=mock_data.VERTICALS))}}},
-        **_errors(401, 403, 429, instance="/v1/verticals")}),
-)
-def list_verticals() -> VerticalList:
-    return VerticalList(items=mock_data.VERTICALS)
-
-
 _SEARCH_EXAMPLE_ITEMS = [
     ConversationSummary(**d.model_dump(include=set(ConversationSummary.model_fields)))
     for email, d in mock_data.CONVERSATIONS.values()
-    if email == "alumna.ejemplo@example.com" and d.vertical == "idiomas"
+    if email == "alumna.ejemplo@example.com" and d.agent_code == "OrquestaAYIIPP"
 ]
 _SEARCH_EXAMPLE_ITEMS.sort(key=lambda c: c.end_date, reverse=True)
 
@@ -119,9 +107,9 @@ _SEARCH_EXAMPLE_ITEMS.sort(key=lambda c: c.end_date, reverse=True)
 @router.post(
     "/students/conversations/search", tags=["Conversaciones"], operation_id="searchStudentConversations",
     response_model=ConversationSearchResponse, dependencies=[read_access],
-    summary="Conversaciones de un alumno en una vertical",
+    summary="Conversaciones de un alumno con un orquestador",
     description=(
-        "Devuelve las conversaciones del alumno, sin mensajes, ordenadas por última actividad descendente.\n\n"
+        "Devuelve las conversaciones del alumno, sin mensajes, con el orquestador indicado (`email` + `agent_code`), ordenadas por última actividad descendente.\n\n"
         "Antes de responder se consulta Serenity para incluir la actividad más reciente del alumno (como "
         "mucho una vez por minuto y alumno). Si Serenity no responde, se devuelven los datos guardados con "
         "`stale: true`.\n\n"
@@ -158,20 +146,20 @@ _SEARCH_EXAMPLE_ITEMS.sort(key=lambda c: c.end_date, reverse=True)
 def search_student_conversations(
     criteria: Annotated[ConversationSearchRequest, Body(openapi_examples={
         "basica": {"summary": "Búsqueda básica",
-                   "value": {"email": "alumna.ejemplo@example.com", "vertical": "idiomas"}},
+                   "value": {"email": "alumna.ejemplo@example.com", "agent_code": "OrquestaAYIIPP"}},
         "filtrada": {"summary": "Abiertas con actividad desde una fecha",
-                     "value": {"email": "alumna.ejemplo@example.com", "vertical": "idiomas",
+                     "value": {"email": "alumna.ejemplo@example.com", "agent_code": "OrquestaAYIIPP",
                                "last_activity_from": "2026-11-20T00:00:00Z", "open": True, "limit": 10}},
         "siguiente_pagina": {"summary": "Página siguiente",
-                             "value": {"email": "alumna.ejemplo@example.com", "vertical": "idiomas", "limit": 2,
+                             "value": {"email": "alumna.ejemplo@example.com", "agent_code": "OrquestaAYIIPP", "limit": 2,
                                        "cursor": _encode_cursor(_SEARCH_EXAMPLE_ITEMS[1])}},
     })],
 ) -> ConversationSearchResponse:
-    if criteria.vertical not in {v.code for v in mock_data.VERTICALS}:
-        raise HTTPException(422, f"La vertical '{criteria.vertical}' no existe. Consultar GET /v1/verticals.")
+    if criteria.agent_code not in AGENTS:
+        raise HTTPException(422, f"El agente '{criteria.agent_code}' no existe.")
 
     rows = [d for email, d in mock_data.CONVERSATIONS.values()
-            if email == criteria.email and d.vertical == criteria.vertical]
+            if email == criteria.email and d.agent_code == criteria.agent_code]
     if criteria.open is not None:
         rows = [d for d in rows if d.open == criteria.open]
     if criteria.last_activity_from:
@@ -197,7 +185,8 @@ def search_student_conversations(
     description=(
         "Si la conversación está abierta y la copia guardada no es reciente, se refresca desde Serenity "
         "antes de responder. Si Serenity no responde, se devuelve la copia guardada con `stale: true`.\n\n"
-        "Los mensajes del agente (`sender: bot`) están en Markdown."
+        "Los mensajes del agente (`sender: bot`) están en Markdown. Incluye el email del alumno en "
+        "`student_email`."
     ),
     responses=_documented("/conversations/{conversation_id}", "get", {
         200: {"content": {"application/json": {"example": _dump(mock_data.example_conversation())}}},

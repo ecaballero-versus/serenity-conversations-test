@@ -20,8 +20,7 @@ El diseño completo está en [../docs/handoff.md](../docs/handoff.md).
 | Método y ruta | Auth | Descripción |
 |---|---|---|
 | `GET /v1/health` | No | Estado del servicio |
-| `GET /v1/verticals` | Sí | Valores válidos de `vertical` |
-| `POST /v1/students/conversations/search` | Sí | Conversaciones de un alumno (email + vertical en el cuerpo), paginadas con cursor |
+| `POST /v1/students/conversations/search` | Sí | Conversaciones de un alumno (email + `agent_code` en el cuerpo), paginadas con cursor |
 | `GET /v1/conversations/{conversation_id}` | Sí | Conversación con mensajes y feedback |
 
 ## Uso (desde esta carpeta, con el venv del proyecto)
@@ -38,25 +37,31 @@ no coincide con la del código.
 
 ## Servidor de prueba
 
-- Token: cualquier `Authorization: Bearer <texto>` sirve. `Bearer token-sin-permiso` devuelve 403.
-- Alumnos de ejemplo: `alumna.ejemplo@example.com` (3 conversaciones en `idiomas`, 1 en
-  `marketing-digital`) y `alumno.demo@example.org` (1 en `idiomas`).
+- `export_openapi.py` solo genera los archivos de `openapi/`. Para probar la API hay que arrancar el
+  servidor con `uvicorn` y abrir http://127.0.0.1:8000/docs.
+- En `/docs`, botón **Authorize**: cualquier `client_id` y `client_secret` sirven (el servidor local
+  simula el endpoint de tokens en `/mock/oauth2/token`). Después, *Try it out* en cada endpoint.
+- Con curl o Postman: cualquier `Authorization: Bearer <texto>` sirve. `Bearer token-sin-permiso` devuelve 403.
+- La especificación del servidor local apunta a sí mismo; la exportada en `openapi/` lleva el dominio de
+  producción y el endpoint de tokens de Cognito (provisionales).
+- Alumnos de ejemplo: `alumna.ejemplo@example.com` (3 conversaciones con `OrquestaAYIIPP`, 1 con
+  `AgenteOrquestaGCIN`) y `alumno.demo@example.org` (1 con `OrquestaAYIIPP`).
 - `synced_at` es fijo y `stale` siempre es `false`. No hay límite de peticiones (429 solo documentado).
 
 ## Decisiones del contrato
 
-- `vertical` es un string (slug) validado contra `GET /v1/verticals`. Las verticales son de ejemplo
-  hasta acordarlas con IRICOM.
+- El alumno se identifica por email + `agent_code` (código del orquestador en Serenity). Los códigos
+  válidos salen de `../config/agents.yaml`, la misma configuración que usa la ingesta. Las respuestas
+  incluyen también `vertical`, solo informativo.
 - Filtros opcionales de búsqueda: `last_activity_from` / `last_activity_to` (sobre `end_date`) y `open`.
 - Orden: última actividad descendente. Cursor opaco.
 - El mensaje de bienvenida se incluye con `is_welcome: true`.
 - Se exponen `canceled_by_client`, `is_interruption`, `attachments` (forma genérica, pendiente de
   confirmar) y el comentario del feedback.
-- El detalle de conversación no devuelve el email del alumno (IRICOM ya lo conoce).
+- El detalle de conversación incluye el email del alumno (`student_email`) para facilitar la depuración.
 - Los errores de validación no devuelven el valor recibido, para no reflejar emails.
 
 ## Pendiente antes de compartir la versión definitiva
 
 - Dominio de la API (`servers`) y del endpoint de tokens de Cognito (`tokenUrl`); ahora `example.com`.
-- Lista real de verticales.
 - Forma real de `attachedVolatileKnowledges`.

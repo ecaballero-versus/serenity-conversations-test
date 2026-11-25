@@ -2,15 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "API de conversaciones Serenity",
-    "description": "\nAPI de solo lectura con el histórico de conversaciones de los alumnos con los agentes de Serenity Star.\n\n**Fase 0:** contrato provisional. El servidor de prueba responde con datos ficticios.\n\n## Autenticación\nOAuth2 *client credentials*. Todas las rutas, salvo `/v1/health`, requieren un token con el scope\n`conversations:read` en la cabecera `Authorization: Bearer <token>`.\n\n## Identificación del alumno\nEl alumno se identifica por **email + vertical**. El email se envía siempre en el cuerpo de la petición,\nnunca en la URL. Se compara sin distinguir mayúsculas y minúsculas.\n\n## Convenciones\n- Fechas en UTC, formato ISO 8601 con sufijo `Z` (p. ej. `2026-11-24T09:10:49Z`).\n- Los mensajes del agente están en **Markdown**: el aula debe renderizarlo.\n- Paginación con cursor opaco: se envía el `next_cursor` recibido en la petición siguiente, con los\n  mismos criterios. `next_cursor: null` indica la última página.\n- Frescura: cada respuesta incluye `synced_at` (última sincronización con Serenity) y `stale`\n  (`true` si no se pudo refrescar antes de responder).\n- Errores en formato `application/problem+json` (RFC 9457). Los errores de validación (`422`) incluyen\n  la lista `errors` con la ubicación de cada campo erróneo.\n- Se pueden añadir campos nuevos a las respuestas sin cambiar de versión: el cliente debe ignorar los\n  campos que no conozca.\n",
+    "description": "\nAPI de solo lectura con el histórico de conversaciones de los alumnos con los agentes de Serenity Star.\n\n**Fase 0:** contrato provisional. El servidor de prueba responde con datos ficticios.\n\n## Autenticación\nOAuth2 *client credentials*. Todas las rutas, salvo `/v1/health`, requieren un token con el scope\n`conversations:read` en la cabecera `Authorization: Bearer <token>`.\n\n## Identificación del alumno\nEl alumno se identifica por **email + código del agente orquestador** (`agent_code`). Una misma\nvertical puede tener varios orquestadores (p. ej. entrada básica y ejecutiva). El email se envía siempre en el cuerpo de la petición,\nnunca en la URL. Se compara sin distinguir mayúsculas y minúsculas.\n\n## Convenciones\n- Fechas en UTC, formato ISO 8601 con sufijo `Z` (p. ej. `2026-11-24T09:10:49Z`).\n- Los mensajes del agente están en **Markdown**: el aula debe renderizarlo.\n- Paginación con cursor opaco: se envía el `next_cursor` recibido en la petición siguiente, con los\n  mismos criterios. `next_cursor: null` indica la última página.\n- Frescura: cada respuesta incluye `synced_at` (última sincronización con Serenity) y `stale`\n  (`true` si no se pudo refrescar antes de responder).\n- Errores en formato `application/problem+json` (RFC 9457). Los errores de validación (`422`) incluyen\n  la lista `errors` con la ubicación de cada campo erróneo.\n- Se pueden añadir campos nuevos a las respuestas sin cambiar de versión: el cliente debe ignorar los\n  campos que no conozca.\n",
     "version": "0.1.0"
   },
-  "servers": [
-    {
-      "url": "https://api.example.com",
-      "description": "Pendiente: dominio definitivo"
-    }
-  ],
   "paths": {
     "/v1/health": {
       "get": {
@@ -34,131 +28,13 @@
         }
       }
     },
-    "/v1/verticals": {
-      "get": {
-        "tags": [
-          "Catálogo"
-        ],
-        "summary": "Verticales disponibles",
-        "description": "Valores válidos del campo `vertical`. Se añadirán verticales nuevas sin cambiar el contrato.",
-        "operationId": "listVerticals",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerticalList"
-                },
-                "example": {
-                  "items": [
-                    {
-                      "code": "idiomas",
-                      "name": "Idiomas"
-                    },
-                    {
-                      "code": "marketing-digital",
-                      "name": "Marketing digital"
-                    },
-                    {
-                      "code": "programacion",
-                      "name": "Programación"
-                    },
-                    {
-                      "code": "sanidad",
-                      "name": "Sanidad"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Falta el token de acceso, ha caducado o no es válido.",
-            "headers": {
-              "WWW-Authenticate": {
-                "description": "Esquema de autenticación requerido.",
-                "schema": {
-                  "type": "string",
-                  "example": "Bearer"
-                }
-              }
-            },
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                },
-                "example": {
-                  "type": "https://api.example.com/problems/unauthorized",
-                  "title": "Unauthorized",
-                  "status": 401,
-                  "detail": "Falta el token de acceso o no es válido.",
-                  "instance": "/v1/verticals"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "El token no tiene el scope `conversations:read`.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                },
-                "example": {
-                  "type": "https://api.example.com/problems/forbidden",
-                  "title": "Forbidden",
-                  "status": 403,
-                  "detail": "El token no tiene el scope conversations:read.",
-                  "instance": "/v1/verticals"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Se ha superado el límite de peticiones. Reintentar tras los segundos indicados en `Retry-After`.",
-            "headers": {
-              "Retry-After": {
-                "description": "Segundos que hay que esperar antes de reintentar.",
-                "schema": {
-                  "type": "integer",
-                  "example": 30
-                }
-              }
-            },
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                },
-                "example": {
-                  "type": "https://api.example.com/problems/rate-limited",
-                  "title": "Too Many Requests",
-                  "status": 429,
-                  "detail": "Demasiadas peticiones.",
-                  "instance": "/v1/verticals"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "oauth2": [
-              "conversations:read"
-            ]
-          }
-        ]
-      }
-    },
     "/v1/students/conversations/search": {
       "post": {
         "tags": [
           "Conversaciones"
         ],
-        "summary": "Conversaciones de un alumno en una vertical",
-        "description": "Devuelve las conversaciones del alumno, sin mensajes, ordenadas por última actividad descendente.\n\nAntes de responder se consulta Serenity para incluir la actividad más reciente del alumno (como mucho una vez por minuto y alumno). Si Serenity no responde, se devuelven los datos guardados con `stale: true`.\n\nUn alumno sin conversaciones devuelve `200` con `items` vacío, no `404`.\n\nEl email va en el cuerpo, y no en la URL, para que no quede registrado en los logs.",
+        "summary": "Conversaciones de un alumno con un orquestador",
+        "description": "Devuelve las conversaciones del alumno, sin mensajes, con el orquestador indicado (`email` + `agent_code`), ordenadas por última actividad descendente.\n\nAntes de responder se consulta Serenity para incluir la actividad más reciente del alumno (como mucho una vez por minuto y alumno). Si Serenity no responde, se devuelven los datos guardados con `stale: true`.\n\nUn alumno sin conversaciones devuelve `200` con `items` vacío, no `404`.\n\nEl email va en el cuerpo, y no en la URL, para que no quede registrado en los logs.",
         "operationId": "searchStudentConversations",
         "requestBody": {
           "content": {
@@ -171,14 +47,14 @@
                   "summary": "Búsqueda básica",
                   "value": {
                     "email": "alumna.ejemplo@example.com",
-                    "vertical": "idiomas"
+                    "agent_code": "OrquestaAYIIPP"
                   }
                 },
                 "filtrada": {
                   "summary": "Abiertas con actividad desde una fecha",
                   "value": {
                     "email": "alumna.ejemplo@example.com",
-                    "vertical": "idiomas",
+                    "agent_code": "OrquestaAYIIPP",
                     "last_activity_from": "2026-11-20T00:00:00Z",
                     "open": true,
                     "limit": 10
@@ -188,7 +64,7 @@
                   "summary": "Página siguiente",
                   "value": {
                     "email": "alumna.ejemplo@example.com",
-                    "vertical": "idiomas",
+                    "agent_code": "OrquestaAYIIPP",
                     "limit": 2,
                     "cursor": "eyJlIjogIjIwMjYtMTEtMThUMTY6MDI6NDkrMDA6MDAiLCAiaSI6ICIzZjZjMmExMC04YjRlLTRkMjEtOWM3YS0xZTJmM2E0YjVjMDIifQ"
                   }
@@ -213,7 +89,8 @@
                       "items": [
                         {
                           "id": "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c01",
-                          "vertical": "idiomas",
+                          "agent_code": "OrquestaAYIIPP",
+                          "vertical": "ayudantes",
                           "title": "Diferencia entre present perfect y past simple",
                           "start_date": "2026-11-24T09:10:00Z",
                           "end_date": "2026-11-24T09:11:38Z",
@@ -222,7 +99,8 @@
                         },
                         {
                           "id": "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c02",
-                          "vertical": "idiomas",
+                          "agent_code": "OrquestaAYIIPP",
+                          "vertical": "ayudantes",
                           "title": "Corrección de un email formal en inglés",
                           "start_date": "2026-11-18T16:02:00Z",
                           "end_date": "2026-11-18T16:02:49Z",
@@ -241,7 +119,8 @@
                       "items": [
                         {
                           "id": "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c03",
-                          "vertical": "idiomas",
+                          "agent_code": "OrquestaAYIIPP",
+                          "vertical": "ayudantes",
                           "title": "Vocabulario para una entrevista de trabajo",
                           "start_date": "2026-11-10T11:30:00Z",
                           "end_date": "2026-11-10T11:31:38Z",
@@ -260,7 +139,8 @@
                       "items": [
                         {
                           "id": "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c01",
-                          "vertical": "idiomas",
+                          "agent_code": "OrquestaAYIIPP",
+                          "vertical": "ayudantes",
                           "title": "Diferencia entre present perfect y past simple",
                           "start_date": "2026-11-24T09:10:00Z",
                           "end_date": "2026-11-24T09:11:38Z",
@@ -394,7 +274,7 @@
           "Conversaciones"
         ],
         "summary": "Conversación con mensajes y feedback",
-        "description": "Si la conversación está abierta y la copia guardada no es reciente, se refresca desde Serenity antes de responder. Si Serenity no responde, se devuelve la copia guardada con `stale: true`.\n\nLos mensajes del agente (`sender: bot`) están en Markdown.",
+        "description": "Si la conversación está abierta y la copia guardada no es reciente, se refresca desde Serenity antes de responder. Si Serenity no responde, se devuelve la copia guardada con `stale: true`.\n\nLos mensajes del agente (`sender: bot`) están en Markdown. Incluye el email del alumno en `student_email`.",
         "operationId": "getConversation",
         "security": [
           {
@@ -425,7 +305,8 @@
                 },
                 "example": {
                   "id": "3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c01",
-                  "vertical": "idiomas",
+                  "agent_code": "OrquestaAYIIPP",
+                  "vertical": "ayudantes",
                   "title": "Diferencia entre present perfect y past simple",
                   "start_date": "2026-11-24T09:10:00Z",
                   "end_date": "2026-11-24T09:11:38Z",
@@ -433,13 +314,14 @@
                   "message_count": 5,
                   "synced_at": "2026-11-24T10:00:00Z",
                   "stale": false,
+                  "student_email": "alumna.ejemplo@example.com",
                   "messages": [
                     {
                       "id": "00000000-0000-0000-0000-000000000000",
                       "seq": 0,
                       "sender": "bot",
                       "type": "text",
-                      "content": "¡Hola! Soy tu tutor de idiomas. ¿En qué puedo ayudarte hoy?",
+                      "content": "¡Hola! Soy tu tutor. ¿En qué puedo ayudarte hoy?",
                       "created_at": "2026-11-24T09:10:00Z",
                       "is_welcome": true,
                       "canceled_by_client": false,
@@ -680,15 +562,23 @@
             "format": "uuid",
             "title": "Id"
           },
+          "agent_code": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Agent Code",
+            "description": "Código del agente orquestador de Serenity (distingue mayúsculas y minúsculas). Valores actuales: `AgenteOrquestaPNEB` (jurispol), `AgenteOrquestaPNEE` (jurispol), `AgenteOrquestaGCIN` (prefortia), `OrquestaAYIIPP` (ayudantes).",
+            "examples": [
+              "OrquestaAYIIPP"
+            ]
+          },
           "vertical": {
             "type": "string",
-            "maxLength": 50,
-            "minLength": 1,
-            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
             "title": "Vertical",
-            "description": "Código de la vertical (slug en minúsculas). Los valores válidos se obtienen de `GET /v1/verticals`.",
+            "description": "Vertical a la que pertenece el orquestador. Informativo.",
             "examples": [
-              "idiomas"
+              "ayudantes"
             ]
           },
           "title": {
@@ -744,6 +634,14 @@
             "title": "Stale",
             "description": "`true` si no se pudo refrescar desde Serenity antes de responder y los datos pueden no incluir la actividad más reciente."
           },
+          "student_email": {
+            "type": "string",
+            "title": "Student Email",
+            "description": "Email del alumno, en minúsculas, tal como lo identifica Serenity. Las conversaciones de pruebas de desarrollo tienen un identificador `apikey-user-…@serenitystar.ai`.",
+            "examples": [
+              "alumna.ejemplo@example.com"
+            ]
+          },
           "messages": {
             "items": {
               "$ref": "#/components/schemas/Message"
@@ -757,6 +655,7 @@
         "type": "object",
         "required": [
           "id",
+          "agent_code",
           "vertical",
           "title",
           "start_date",
@@ -765,6 +664,7 @@
           "message_count",
           "synced_at",
           "stale",
+          "student_email",
           "messages"
         ],
         "title": "ConversationDetail"
@@ -780,15 +680,15 @@
               "alumna.ejemplo@example.com"
             ]
           },
-          "vertical": {
+          "agent_code": {
             "type": "string",
-            "maxLength": 50,
+            "maxLength": 100,
             "minLength": 1,
-            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-            "title": "Vertical",
-            "description": "Código de la vertical (slug en minúsculas). Los valores válidos se obtienen de `GET /v1/verticals`.",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Agent Code",
+            "description": "Código del agente orquestador de Serenity (distingue mayúsculas y minúsculas). Valores actuales: `AgenteOrquestaPNEB` (jurispol), `AgenteOrquestaPNEE` (jurispol), `AgenteOrquestaGCIN` (prefortia), `OrquestaAYIIPP` (ayudantes).",
             "examples": [
-              "idiomas"
+              "OrquestaAYIIPP"
             ]
           },
           "last_activity_from": {
@@ -855,7 +755,7 @@
         "type": "object",
         "required": [
           "email",
-          "vertical"
+          "agent_code"
         ],
         "title": "ConversationSearchRequest",
         "description": "Criterios de búsqueda. El email va en el cuerpo para que no quede en los logs de las URL."
@@ -918,15 +818,23 @@
             "format": "uuid",
             "title": "Id"
           },
+          "agent_code": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Agent Code",
+            "description": "Código del agente orquestador de Serenity (distingue mayúsculas y minúsculas). Valores actuales: `AgenteOrquestaPNEB` (jurispol), `AgenteOrquestaPNEE` (jurispol), `AgenteOrquestaGCIN` (prefortia), `OrquestaAYIIPP` (ayudantes).",
+            "examples": [
+              "OrquestaAYIIPP"
+            ]
+          },
           "vertical": {
             "type": "string",
-            "maxLength": 50,
-            "minLength": 1,
-            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
             "title": "Vertical",
-            "description": "Código de la vertical (slug en minúsculas). Los valores válidos se obtienen de `GET /v1/verticals`.",
+            "description": "Vertical a la que pertenece el orquestador. Informativo.",
             "examples": [
-              "idiomas"
+              "ayudantes"
             ]
           },
           "title": {
@@ -969,6 +877,7 @@
         "type": "object",
         "required": [
           "id",
+          "agent_code",
           "vertical",
           "title",
           "start_date",
@@ -1017,7 +926,7 @@
             "type": "string",
             "format": "uuid",
             "title": "Id",
-            "description": "Identificador del mensaje. El de bienvenida es siempre `00000000-0000-0000-0000-000000000000`: úsese junto con el id de la conversación."
+            "description": "Identificador del mensaje en Serenity. **No es único**: la bienvenida y algunos mensajes del agente sin identificador propio (p. ej. avisos) llevan `00000000-0000-0000-0000-000000000000`. Para identificar un mensaje dentro de la conversación, úsese `seq`."
           },
           "seq": {
             "type": "integer",
@@ -1050,7 +959,7 @@
           "is_welcome": {
             "type": "boolean",
             "title": "Is Welcome",
-            "description": "`true` en el mensaje de bienvenida del agente."
+            "description": "`true` en el mensaje de bienvenida del agente (siempre `seq = 0`)."
           },
           "canceled_by_client": {
             "type": "boolean",
@@ -1240,53 +1149,6 @@
           "message"
         ],
         "title": "ValidationIssue"
-      },
-      "Vertical": {
-        "properties": {
-          "code": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 1,
-            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-            "title": "Code",
-            "description": "Código de la vertical (slug en minúsculas). Los valores válidos se obtienen de `GET /v1/verticals`.",
-            "examples": [
-              "idiomas"
-            ]
-          },
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Nombre legible de la vertical.",
-            "examples": [
-              "Idiomas"
-            ]
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "code",
-          "name"
-        ],
-        "title": "Vertical"
-      },
-      "VerticalList": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/Vertical"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "VerticalList"
       }
     },
     "securitySchemes": {
@@ -1310,12 +1172,14 @@
       "description": "Consulta de conversaciones de los alumnos."
     },
     {
-      "name": "Catálogo",
-      "description": "Valores de referencia."
-    },
-    {
       "name": "Sistema",
       "description": "Estado del servicio."
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://api.example.com",
+      "description": "Pendiente: dominio definitivo"
     }
   ]
 }
