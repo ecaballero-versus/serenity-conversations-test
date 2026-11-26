@@ -97,7 +97,7 @@ paths:
                     items:
                     - id: 3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c01
                       agent_code: OrquestaAYIIPP
-                      vertical: ayudantes
+                      vertical: forvide
                       title: Diferencia entre present perfect y past simple
                       start_date: '2026-11-24T09:10:00Z'
                       end_date: '2026-11-24T09:11:38Z'
@@ -105,7 +105,7 @@ paths:
                       message_count: 5
                     - id: 3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c02
                       agent_code: OrquestaAYIIPP
-                      vertical: ayudantes
+                      vertical: forvide
                       title: Corrección de un email formal en inglés
                       start_date: '2026-11-18T16:02:00Z'
                       end_date: '2026-11-18T16:02:49Z'
@@ -120,7 +120,7 @@ paths:
                     items:
                     - id: 3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c03
                       agent_code: OrquestaAYIIPP
-                      vertical: ayudantes
+                      vertical: forvide
                       title: Vocabulario para una entrevista de trabajo
                       start_date: '2026-11-10T11:30:00Z'
                       end_date: '2026-11-10T11:31:38Z'
@@ -135,7 +135,7 @@ paths:
                     items:
                     - id: 3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c01
                       agent_code: OrquestaAYIIPP
-                      vertical: ayudantes
+                      vertical: forvide
                       title: Diferencia entre present perfect y past simple
                       start_date: '2026-11-24T09:10:00Z'
                       end_date: '2026-11-24T09:11:38Z'
@@ -252,7 +252,7 @@ paths:
               example:
                 id: 3f6c2a10-8b4e-4d21-9c7a-1e2f3a4b5c01
                 agent_code: OrquestaAYIIPP
-                vertical: ayudantes
+                vertical: forvide
                 title: Diferencia entre present perfect y past simple
                 start_date: '2026-11-24T09:10:00Z'
                 end_date: '2026-11-24T09:11:38Z'
@@ -464,7 +464,7 @@ components:
           title: Agent Code
           description: 'Código del agente orquestador de Serenity (distingue mayúsculas
             y minúsculas). Valores actuales: `AgenteOrquestaPNEB` (jurispol), `AgenteOrquestaPNEE`
-            (jurispol), `AgenteOrquestaGCIN` (prefortia), `OrquestaAYIIPP` (ayudantes).'
+            (jurispol), `AgenteOrquestaGCIN` (prefortia), `OrquestaAYIIPP` (forvide).'
           examples:
           - OrquestaAYIIPP
         vertical:
@@ -472,7 +472,7 @@ components:
           title: Vertical
           description: Vertical a la que pertenece el orquestador. Informativo.
           examples:
-          - ayudantes
+          - forvide
         title:
           anyOf:
           - type: string
@@ -560,7 +560,7 @@ components:
           title: Agent Code
           description: 'Código del agente orquestador de Serenity (distingue mayúsculas
             y minúsculas). Valores actuales: `AgenteOrquestaPNEB` (jurispol), `AgenteOrquestaPNEE`
-            (jurispol), `AgenteOrquestaGCIN` (prefortia), `OrquestaAYIIPP` (ayudantes).'
+            (jurispol), `AgenteOrquestaGCIN` (prefortia), `OrquestaAYIIPP` (forvide).'
           examples:
           - OrquestaAYIIPP
         last_activity_from:
@@ -659,7 +659,7 @@ components:
           title: Agent Code
           description: 'Código del agente orquestador de Serenity (distingue mayúsculas
             y minúsculas). Valores actuales: `AgenteOrquestaPNEB` (jurispol), `AgenteOrquestaPNEE`
-            (jurispol), `AgenteOrquestaGCIN` (prefortia), `OrquestaAYIIPP` (ayudantes).'
+            (jurispol), `AgenteOrquestaGCIN` (prefortia), `OrquestaAYIIPP` (forvide).'
           examples:
           - OrquestaAYIIPP
         vertical:
@@ -667,7 +667,7 @@ components:
           title: Vertical
           description: Vertical a la que pertenece el orquestador. Informativo.
           examples:
-          - ayudantes
+          - forvide
         title:
           anyOf:
           - type: string

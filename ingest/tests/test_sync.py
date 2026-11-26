@@ -26,6 +26,7 @@ class FakeClient:
         self.feedback: dict[str, dict] = {}
         self.fail_ids: set[str] = set()
         self.detail_calls: list[str] = []
+        self.list_calls: list[str | None] = []
         self.requests_made = 0
         self.rate_limit_remaining = 1000
 
@@ -42,9 +43,12 @@ class FakeClient:
         self.convs[cid] = {"version": 13, "id": cid, "name": "Título", "startDate": fmt(start), "endDate": fmt(end),
                            "open": True, "userIdentifier": email, "messages": msgs}
 
-    def list_conversations(self, agent, page, page_size):
+    def list_conversations(self, agent, page, page_size, user_identifier=None):
         self.requests_made += 1
+        self.list_calls.append(user_identifier)
         items = sorted(self.convs.values(), key=lambda c: c["endDate"], reverse=True)
+        if user_identifier:  # Serenity: coincidencia exacta sin distinguir mayúsculas
+            items = [c for c in items if c["userIdentifier"].lower() == user_identifier.lower()]
         chunk = items[(page - 1) * page_size: page * page_size]
         return {"total": len(items), "page": page, "pageSize": page_size,
                 "items": [{"id": c["id"], "endDate": c["endDate"], "startDate": c["startDate"],
@@ -222,3 +226,61 @@ def test_migracion_anade_columnas(tmp_path):
     assert "agent_version" in cols
     with engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM serenity_conversations")).scalar() == 1
+
+
+# --- Lectura síncrona (bajo demanda) -----------------------------------------------------------------
+
+from ingest.ondemand import refresh_conversation, sync_student  # noqa: E402
+
+STUDENT = "alumno.ficticio@example.com"
+
+
+def test_lectura_sincrona_solo_descarga_lo_del_alumno(env):
+    engine, client, store = env
+    client.add_conv("12121212-0000-0000-0000-000000000001", minutes_ago=60 * 24 * 20)  # fuera de la ventana inicial
+    client.add_conv("12121212-0000-0000-0000-000000000002", minutes_ago=3)
+    client.add_conv("12121212-0000-0000-0000-000000000003", minutes_ago=2, email="otra.persona@example.com")
+    assert sync_student(engine, client, store, AGENT, "Alumno.Ficticio@Example.com") is True
+    assert client.list_calls == [STUDENT]
+    assert sorted(client.detail_calls) == ["12121212-0000-0000-0000-000000000001",
+                                           "12121212-0000-0000-0000-000000000002"]
+    # Antes de 60 s no se vuelve a consultar Serenity
+    client.list_calls.clear()
+    assert sync_student(engine, client, store, AGENT, STUDENT) is True and client.list_calls == []
+
+
+def test_lectura_sincrona_incremental_por_alumno(env):
+    engine, client, store = env
+    client.add_conv("13131313-0000-0000-0000-000000000001", minutes_ago=60)
+    sync_student(engine, client, store, AGENT, STUDENT)
+    client.detail_calls.clear()
+    client.add_conv("13131313-0000-0000-0000-000000000002", minutes_ago=0)
+    assert sync_student(engine, client, store, AGENT, STUDENT, min_interval=timedelta(0)) is True
+    assert client.detail_calls == ["13131313-0000-0000-0000-000000000002"]
+
+
+def test_lectura_sincrona_con_fallo(env):
+    engine, client, store = env
+    cid = "14141414-0000-0000-0000-000000000001"
+    client.add_conv(cid, minutes_ago=1)
+    client.fail_ids.add(cid)
+    assert sync_student(engine, client, store, AGENT, STUDENT) is False
+    # No se registra la sincronización: el siguiente intento vuelve a consultar Serenity
+    assert count(engine, db.student_state) == 0 and count(engine, db.pending) == 1
+    client.fail_ids.clear()
+    assert sync_student(engine, client, store, AGENT, STUDENT) is True and count(engine, db.pending) == 0
+
+
+def test_refresco_de_conversacion(env):
+    engine, client, store = env
+    cid = "15151515-0000-0000-0000-000000000001"
+    client.add_conv(cid, minutes_ago=5)
+    run_ingest(engine, client, store, AGENT)
+    client.add_conv(cid, minutes_ago=0, n_turns=3)
+    assert refresh_conversation(engine, client, store, AGENT, cid) is True
+    with engine.connect() as conn:
+        assert conn.execute(select(db.conversations.c.message_count)).scalar() == 7
+        # El refresco no trae metadatos del listado: se conservan los guardados
+        assert conn.execute(select(db.conversations.c.channel)).scalar() == "FV IP"
+    client.fail_ids.add(cid)
+    assert refresh_conversation(engine, client, store, AGENT, cid) is False

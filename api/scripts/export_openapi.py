@@ -3,12 +3,15 @@
 Uso (desde la carpeta api/):  python scripts/export_openapi.py
 """
 import json
+import os
 import sys
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+# Siempre con datos ficticios y tokens de prueba, aunque el .env configure la base real o un token fijo
+os.environ.update(API_BACKEND="mock", API_TOKEN="", API_SYNC_ON_DEMAND="false")
 sys.path.insert(0, str(ROOT))
 
 from app.main import export_openapi  # noqa: E402

@@ -42,17 +42,20 @@ class RunStats:
     feedback_deleted: int = 0
 
 
-def _list_changed(client: SerenityClient, agent_code: str, lower_bound) -> dict[str, dict]:
-    """Conversaciones con última actividad >= lower_bound: id -> {end_date, channel, agent_version}."""
+def _list_changed(client: SerenityClient, agent_code: str, lower_bound,
+                  user_identifier: str | None = None) -> dict[str, dict]:
+    """Conversaciones con última actividad >= lower_bound (None: todas): id -> {end_date, channel,
+    agent_version}. Con `user_identifier`, solo las de ese alumno."""
     found: dict[str, dict] = {}
     page = 1
+    extra = {"user_identifier": user_identifier} if user_identifier else {}
     while True:
-        data = client.list_conversations(agent_code, page, PAGE_SIZE)
+        data = client.list_conversations(agent_code, page, PAGE_SIZE, **extra)
         items = data.get("items") or []
         reached_older = False
         for item in items:
             end = parse_utc(item["endDate"])
-            if end < lower_bound:
+            if lower_bound is not None and end < lower_bound:
                 reached_older = True
                 break
             # Si una conversación recibe actividad mientras se pagina, puede aparecer dos veces: se deduplica
@@ -114,6 +117,33 @@ def _save_conversation(engine: Engine, store: LocalRawStore, agent_code: str, de
             } for seq, m in enumerate(msgs)])
         conn.execute(delete(db.pending).where(db.pending.c.agent_code == agent_code,
                                               db.pending.c.conversation_id == conv_id))
+
+
+def _stored_end_dates(engine: Engine, ids) -> dict:
+    if not ids:
+        return {}
+    with engine.connect() as conn:
+        return dict(conn.execute(select(db.conversations.c.id, db.conversations.c.end_date)
+                                 .where(db.conversations.c.id.in_(list(ids)))).all())
+
+
+def fetch_one(engine: Engine, client: SerenityClient, store: LocalRawStore, agent_code: str, conv_id: str,
+              meta: dict | None) -> str:
+    """Descarga y guarda una conversación. Devuelve "ok", "not_found" o "failed" (queda en sync_pending)."""
+    try:
+        detail, raw = client.get_conversation(agent_code, conv_id)
+        _save_conversation(engine, store, agent_code, detail, raw, meta)
+        return "ok"
+    except NotFound:
+        # Puede haber caducado por la retención de Serenity entre el listado y el detalle
+        with engine.begin() as conn:
+            conn.execute(delete(db.pending).where(db.pending.c.agent_code == agent_code,
+                                                  db.pending.c.conversation_id == conv_id))
+        return "not_found"
+    except Exception as exc:  # noqa: BLE001 - un fallo no detiene el ciclo
+        _mark_pending(engine, agent_code, conv_id, _safe_error(exc))
+        log.warning("Conversación %s fallida: %s", conv_id, type(exc).__name__)
+        return "failed"
 
 
 def _safe_error(exc: Exception) -> str:
@@ -208,9 +238,7 @@ def run_ingest(engine: Engine, client: SerenityClient, store: LocalRawStore, age
         changed = _list_changed(client, agent_code, lower_bound)
         stats.listed = len(changed)
 
-        with engine.connect() as conn:
-            stored = dict(conn.execute(select(db.conversations.c.id, db.conversations.c.end_date)
-                                       .where(db.conversations.c.id.in_(list(changed)))).all()) if changed else {}
+        stored = _stored_end_dates(engine, changed)
         to_fetch = [cid for cid, info in changed.items() if stored.get(cid) != info["end_date"]]
         stats.unchanged = len(changed) - len(to_fetch)
         to_fetch += [cid for cid in pending_ids if cid not in to_fetch]
@@ -230,20 +258,13 @@ def run_ingest(engine: Engine, client: SerenityClient, store: LocalRawStore, age
                              unchanged_meta)
 
         for i, conv_id in enumerate(to_fetch, 1):
-            try:
-                detail, raw = client.get_conversation(agent_code, conv_id)
-                _save_conversation(engine, store, agent_code, detail, raw, changed.get(conv_id))
+            result = fetch_one(engine, client, store, agent_code, conv_id, changed.get(conv_id))
+            if result == "ok":
                 stats.fetched += 1
-            except NotFound:
-                # Puede haber caducado por la retención de Serenity entre el listado y el detalle
+            elif result == "not_found":
                 stats.not_found += 1
-                with engine.begin() as conn:
-                    conn.execute(delete(db.pending).where(db.pending.c.agent_code == agent_code,
-                                                          db.pending.c.conversation_id == conv_id))
-            except Exception as exc:  # noqa: BLE001 - un fallo no detiene el ciclo
+            else:
                 stats.failed += 1
-                _mark_pending(engine, agent_code, conv_id, _safe_error(exc))
-                log.warning("Conversación %s fallida: %s", conv_id, type(exc).__name__)
             if i % 50 == 0:
                 log.info("Progreso: %s/%s", i, len(to_fetch))
 

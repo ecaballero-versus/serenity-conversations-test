@@ -47,7 +47,7 @@ def test_403_sin_scope():
 
 def test_resultados_incluyen_agente_y_vertical():
     item = search().json()["items"][0]
-    assert item["agent_code"] == "OrquestaAYIIPP" and item["vertical"] == "ayudantes"
+    assert item["agent_code"] == "OrquestaAYIIPP" and item["vertical"] == "forvide"
 
 
 def test_otro_agente_del_mismo_alumno_no_se_mezcla():

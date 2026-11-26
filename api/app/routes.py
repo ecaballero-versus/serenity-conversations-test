@@ -1,4 +1,7 @@
-"""Endpoints v1. En la fase 0 responden con los datos ficticios de `mock_data`."""
+"""Endpoints v1. Los datos salen de `store` (ficticios o de la base local, según `API_BACKEND`).
+
+Los ejemplos de la documentación usan siempre los datos ficticios de `mock_data`.
+"""
 import base64
 import binascii
 import json
@@ -6,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from . import __version__, mock_data
 from .agents import AGENTS
@@ -20,6 +23,7 @@ from .models import (
     Problem,
 )
 from .security import read_access
+from .store import Store, get_store
 
 router = APIRouter(prefix="/v1")
 
@@ -92,8 +96,8 @@ def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
 
 @router.get("/health", tags=["Sistema"], operation_id="getHealth", response_model=Health,
             summary="Estado del servicio", description="No requiere autenticación.")
-def health() -> Health:
-    return Health(status="ok", version=__version__, time=datetime.now(timezone.utc))
+def health(store: Annotated[Store, Depends(get_store)]) -> Health:
+    return Health(status=store.health(), version=__version__, time=datetime.now(timezone.utc))
 
 
 _SEARCH_EXAMPLE_ITEMS = [
@@ -154,28 +158,17 @@ def search_student_conversations(
                              "value": {"email": "alumna.ejemplo@example.com", "agent_code": "OrquestaAYIIPP", "limit": 2,
                                        "cursor": _encode_cursor(_SEARCH_EXAMPLE_ITEMS[1])}},
     })],
+    store: Annotated[Store, Depends(get_store)],
 ) -> ConversationSearchResponse:
     if criteria.agent_code not in AGENTS:
         raise HTTPException(422, f"El agente '{criteria.agent_code}' no existe.")
 
-    rows = [d for email, d in mock_data.CONVERSATIONS.values()
-            if email == criteria.email and d.agent_code == criteria.agent_code]
-    if criteria.open is not None:
-        rows = [d for d in rows if d.open == criteria.open]
-    if criteria.last_activity_from:
-        rows = [d for d in rows if d.end_date >= criteria.last_activity_from]
-    if criteria.last_activity_to:
-        rows = [d for d in rows if d.end_date < criteria.last_activity_to]
-    rows.sort(key=lambda d: (d.end_date, d.id), reverse=True)
-    if criteria.cursor:
-        after = _decode_cursor(criteria.cursor)
-        rows = [d for d in rows if (d.end_date, d.id) < after]
-
-    page = [ConversationSummary(**d.model_dump(include=set(ConversationSummary.model_fields)))
-            for d in rows[:criteria.limit]]
-    next_cursor = _encode_cursor(page[-1]) if len(rows) > criteria.limit else None
-    return ConversationSearchResponse(items=page, next_cursor=next_cursor,
-                                      synced_at=mock_data.SYNCED_AT if rows else None, stale=False)
+    after = _decode_cursor(criteria.cursor) if criteria.cursor else None
+    result = store.search(criteria, after)
+    page = result.items[:criteria.limit]
+    next_cursor = _encode_cursor(page[-1]) if len(result.items) > criteria.limit else None
+    return ConversationSearchResponse(items=page, next_cursor=next_cursor, synced_at=result.synced_at,
+                                      stale=result.stale)
 
 
 @router.get(
@@ -194,8 +187,8 @@ def search_student_conversations(
                   pointer="path/conversation_id", pointer_message="Input should be a valid UUID"),
     }),
 )
-def get_conversation(conversation_id: UUID) -> ConversationDetail:
-    found = mock_data.CONVERSATIONS.get(conversation_id)
-    if not found:
+def get_conversation(conversation_id: UUID, store: Annotated[Store, Depends(get_store)]) -> ConversationDetail:
+    found = store.get(conversation_id)
+    if found is None:
         raise HTTPException(404, "No existe la conversación.")
-    return found[1]
+    return found

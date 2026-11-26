@@ -36,7 +36,7 @@ AgentCode = Annotated[
 
 VerticalCode = Annotated[
     str,
-    Field(description="Vertical a la que pertenece el orquestador. Informativo.", examples=["ayudantes"]),
+    Field(description="Vertical a la que pertenece el orquestador. Informativo.", examples=["forvide"]),
 ]
 
 

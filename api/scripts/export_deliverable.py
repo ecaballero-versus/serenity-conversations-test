@@ -1,10 +1,12 @@
 r"""Regenera deliverable-v1/iricom/: copia la especificación exportada y genera los ejemplos con el servidor
 de prueba (datos ficticios). Uso, desde la raíz:  .venv\Scripts\python.exe api/scripts/export_deliverable.py
 """
-import json, shutil, subprocess, sys
+import json, os, shutil, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+# Siempre con datos ficticios y tokens de prueba, aunque el .env configure la base real o un token fijo
+os.environ.update(API_BACKEND="mock", API_TOKEN="", API_SYNC_ON_DEMAND="false")
 sys.path.insert(0, str(ROOT / "api"))
 subprocess.run([sys.executable, str(ROOT / "api" / "scripts" / "export_openapi.py")], check=True, cwd=ROOT / "api")
 DEST = ROOT / "deliverable-v1" / "iricom"

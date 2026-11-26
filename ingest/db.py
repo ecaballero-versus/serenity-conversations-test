@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     TypeDecorator,
     create_engine,
+    event,
     inspect,
     text,
 )
@@ -114,6 +115,15 @@ agent_state = Table(
     Column("updated_at", UTCDateTime, nullable=False),
 )
 
+student_state = Table(
+    "sync_student_state", metadata,
+    # Lectura síncrona (bajo demanda) por alumno: como mucho una consulta a Serenity por minuto
+    Column("agent_code", String(100), primary_key=True),
+    Column("user_identifier", String(320), primary_key=True),
+    Column("last_synced_at", UTCDateTime, nullable=False),
+    Column("watermark", UTCDateTime),  # última actividad más reciente vista para el alumno
+)
+
 runs = Table(
     "sync_runs", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -147,7 +157,18 @@ pending = Table(
 
 
 def make_engine(url: str) -> Engine:
-    engine = create_engine(url)
+    if url.startswith("sqlite"):
+        # La API (varios hilos) y la ingesta periódica (otro proceso) escriben a la vez en el mismo archivo
+        engine = create_engine(url, connect_args={"timeout": 30, "check_same_thread": False})
+
+        @event.listens_for(engine, "connect")
+        def _sqlite_pragmas(dbapi_conn, _):
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=30000")
+            cur.close()
+    else:
+        engine = create_engine(url)
     metadata.create_all(engine)
     _add_missing_columns(engine)
     return engine

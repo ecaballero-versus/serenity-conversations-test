@@ -21,13 +21,17 @@ class SerenityError(Exception):
 
 
 class SerenityClient:
-    def __init__(self, base_url: str, api_key: str, rps: float = 3.0, timeout: float = 30, max_retries: int = 5):
+    def __init__(self, base_url: str, api_key: str, rps: float = 3.0, timeout: float = 30, max_retries: int = 5,
+                 wait_on_429: bool = True):
+        """wait_on_429=False: ante un 429 se lanza SerenityError en lugar de esperar (lecturas bajo demanda,
+        donde hay alguien esperando la respuesta)."""
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
         self.session.headers["X-API-KEY"] = api_key
         self.min_interval = 1.0 / rps
         self.timeout = timeout
         self.max_retries = max_retries
+        self.wait_on_429 = wait_on_429
         self._last_request = 0.0
         self.requests_made = 0
         self.rate_limit_remaining: int | None = None
@@ -52,6 +56,8 @@ class SerenityClient:
             remaining = r.headers.get("X-Rate-Limit-Remaining")
             if remaining and remaining.isdigit():
                 self.rate_limit_remaining = int(remaining)
+            if r.status_code == 429 and not self.wait_on_429:
+                raise SerenityError(f"HTTP 429 en {path}")
             if r.status_code == 429:
                 retry_after = r.headers.get("Retry-After", "")
                 delay = int(retry_after) if retry_after.isdigit() else 30
@@ -70,10 +76,14 @@ class SerenityClient:
             return r
         raise SerenityError(f"HTTP {r.status_code} en {path} tras {self.max_retries} reintentos")
 
-    def list_conversations(self, agent_code: str, page: int, page_size: int = 200) -> dict:
-        """Listado ordenado por fecha de fin (última actividad) descendente."""
-        return self._get(f"/api/v2/AgentInstance/{agent_code}",
-                         {"page": page, "pageSize": page_size, "sortDirection": "desc"}).json()
+    def list_conversations(self, agent_code: str, page: int, page_size: int = 200,
+                           user_identifier: str | None = None) -> dict:
+        """Listado ordenado por fecha de fin (última actividad) descendente. `user_identifier` filtra por
+        alumno (coincidencia exacta, sin distinguir mayúsculas)."""
+        params = {"page": page, "pageSize": page_size, "sortDirection": "desc"}
+        if user_identifier:
+            params["userIdentifier"] = user_identifier
+        return self._get(f"/api/v2/AgentInstance/{agent_code}", params).json()
 
     def get_conversation(self, agent_code: str, conversation_id: str) -> tuple[dict, bytes]:
         """Devuelve el detalle interpretado y los bytes originales de la respuesta."""

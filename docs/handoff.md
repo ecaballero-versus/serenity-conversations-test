@@ -30,6 +30,9 @@ plataforma Delfín. Motivo: Serenity solo conserva los datos un tiempo limitado 
   para que IRICOM empiece su integración.
 - **Fase 1**: prototipo local en Python: ingesta, base de datos, carpeta local en lugar de S3,
   API con token fijo en lugar de Cognito, lectura síncrona, reconciliación de feedback.
+  **Hecho (26/11/2026)** con SQLite y `OrquestaAYIIPP`: `ingest loop` (ingesta periódica), API con
+  `API_BACKEND=db`, lectura síncrona (`ingest/ondemand.py`, estado en `sync_student_state`).
+  Ver `api/README.md`.
 - **Fase 2**: beta en AWS con DevOps, con infraestructura como código (Terraform o CDK, por decidir).
 
 ## API de Serenity (verificado con pruebas)

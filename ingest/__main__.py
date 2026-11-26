@@ -2,7 +2,11 @@
 
 Uso, desde la raíz del proyecto:
   .venv\\Scripts\\python.exe -m ingest run [--agent OrquestaAYIIPP] [--days 7] [--rps 3] [--dry-run] [--rescan-days N]
+  .venv\\Scripts\\python.exe -m ingest loop [--interval 300] [mismas opciones que run]
   .venv\\Scripts\\python.exe -m ingest status [--agent OrquestaAYIIPP]
+
+`loop` simula la ingesta periódica de AWS (EventBridge cada 5 minutos): ejecuta un ciclo, espera y repite
+hasta Ctrl+C.
 
 Sin --agent se sincronizan los orquestadores con sync_enabled: true en config/agents.yaml.
 Datos en LOCAL_DATA_DIR (por defecto ./data): base de datos SQLite y JSON originales.
@@ -11,6 +15,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -59,6 +64,20 @@ def cmd_run(engine, args) -> int:
     return exit_code
 
 
+def cmd_loop(engine, args) -> int:
+    log.info("Ingesta periódica cada %s s. Ctrl+C para parar.", args.interval)
+    try:
+        while True:
+            started = time.monotonic()
+            cmd_run(engine, args)  # un ciclo fallido no detiene el bucle: se reintenta en el siguiente
+            wait = max(0.0, args.interval - (time.monotonic() - started))
+            log.info("Siguiente ciclo en %.0f s", wait)
+            time.sleep(wait)
+    except KeyboardInterrupt:
+        log.info("Ingesta periódica detenida")
+        return 0
+
+
 def cmd_status(engine, args) -> int:
     load_agents(engine)
     c, m, f, p = db.conversations, db.messages, db.message_feedback, db.pending
@@ -98,13 +117,16 @@ def cmd_status(engine, args) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(prog="ingest")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    run = sub.add_parser("run", help="Ejecuta un ciclo de ingesta")
-    run.add_argument("--agent", help="Código del orquestador (por defecto, los habilitados)")
-    run.add_argument("--days", type=int, default=7, help="Ventana de la primera ejecución (días)")
-    run.add_argument("--rps", type=float, default=3.0, help="Peticiones por segundo a Serenity")
-    run.add_argument("--dry-run", action="store_true", help="Solo lista y cuenta; no descarga ni guarda")
-    run.add_argument("--rescan-days", type=int,
-                     help="Relee el listado de los últimos N días aunque haya marca de agua")
+    run_opts = argparse.ArgumentParser(add_help=False)
+    run_opts.add_argument("--agent", help="Código del orquestador (por defecto, los habilitados)")
+    run_opts.add_argument("--days", type=int, default=7, help="Ventana de la primera ejecución (días)")
+    run_opts.add_argument("--rps", type=float, default=3.0, help="Peticiones por segundo a Serenity")
+    run_opts.add_argument("--dry-run", action="store_true", help="Solo lista y cuenta; no descarga ni guarda")
+    run_opts.add_argument("--rescan-days", type=int,
+                          help="Relee el listado de los últimos N días aunque haya marca de agua")
+    sub.add_parser("run", parents=[run_opts], help="Ejecuta un ciclo de ingesta")
+    loop = sub.add_parser("loop", parents=[run_opts], help="Ejecuta ciclos de ingesta periódicamente")
+    loop.add_argument("--interval", type=int, default=300, help="Segundos entre ciclos (por defecto 300)")
     status = sub.add_parser("status", help="Resumen de lo sincronizado")
     status.add_argument("--agent")
     args = parser.parse_args()
@@ -113,7 +135,9 @@ def main() -> int:
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     engine = db.make_engine(f"sqlite:///{DATA_DIR / 'serenity.db'}")
-    return {"run": cmd_run, "status": cmd_status}[args.cmd](engine, args)
+    if args.cmd == "loop" and args.rescan_days:
+        parser.error("--rescan-days no tiene sentido en loop: úsalo con run")
+    return {"run": cmd_run, "loop": cmd_loop, "status": cmd_status}[args.cmd](engine, args)
 
 
 if __name__ == "__main__":

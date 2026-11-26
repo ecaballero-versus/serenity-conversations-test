@@ -1,6 +1,7 @@
-# API de conversaciones Serenity: fase 0
+# API de conversaciones Serenity
 
-Contrato de la API de solo lectura para IRICOM y servidor de prueba con **datos ficticios**.
+Contrato de la API de solo lectura para IRICOM (fase 0) y servidor local (fase 1). El servidor funciona
+con **datos ficticios** o con la **base local de la ingesta**, con datos reales.
 El diseño completo está en [../docs/handoff.md](../docs/handoff.md).
 
 ## Contenido
@@ -35,18 +36,58 @@ El diseño completo está en [../docs/handoff.md](../docs/handoff.md).
 Tras cambiar modelos o rutas hay que regenerar `openapi/`. Un test falla si la especificación exportada
 no coincide con la del código.
 
-## Servidor de prueba
+## Modos del servidor
 
-- `export_openapi.py` solo genera los archivos de `openapi/`. Para probar la API hay que arrancar el
-  servidor con `uvicorn` y abrir http://127.0.0.1:8000/docs.
-- En `/docs`, botón **Authorize**: cualquier `client_id` y `client_secret` sirven (el servidor local
-  simula el endpoint de tokens en `/mock/oauth2/token`). Después, *Try it out* en cada endpoint.
-- Con curl o Postman: cualquier `Authorization: Bearer <texto>` sirve. `Bearer token-sin-permiso` devuelve 403.
-- La especificación del servidor local apunta a sí mismo; la exportada en `openapi/` lleva el dominio de
+Se elige con `API_BACKEND` en el `.env` de la raíz (plantilla en `../.env.example`). Los tests y los scripts
+de exportación usan siempre `mock`, sea cual sea el `.env`.
+
+### `API_BACKEND=db`: versión local con datos reales
+
+Hacen falta dos terminales, desde la raíz del proyecto:
+
+```powershell
+# 1. Ingesta periódica: un ciclo cada 5 minutos hasta Ctrl+C (simula EventBridge)
+.venv\Scripts\python.exe -m ingest loop
+
+# 2. API
+cd api
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload     # http://127.0.0.1:8000/docs
+```
+
+- **Datos**: lee la base de la ingesta (`data/serenity.db`). Solo hay datos de los orquestadores con
+  `sync_enabled: true` en `config/agents.yaml`.
+- **Token fijo** en lugar de Cognito: solo se acepta `API_TOKEN`.
+  - En `/docs`, botón **Authorize**: `API_CLIENT_ID` y `API_CLIENT_SECRET` del `.env`.
+  - Con curl o Postman: `Authorization: Bearer <API_TOKEN>`.
+- **Lectura síncrona** (`API_SYNC_ON_DEMAND`, activada por defecto):
+  - Antes de responder a una búsqueda, la API consulta a Serenity las novedades de ese alumno. Lo hace
+    como mucho una vez por minuto y alumno.
+  - El detalle de una conversación abierta se vuelve a descargar si la copia tiene más de 60 s.
+  - Si Serenity falla, se responde con los datos guardados y `stale: true`.
+  - Solo se aplica en los orquestadores sincronizados.
+- **`synced_at`**: la sincronización más reciente que cubre los datos devueltos, ya sea el último ciclo
+  correcto de la ingesta o la lectura síncrona.
+- **`/v1/health`**: responde `degraded` si algún orquestador sincronizado lleva más de 15 minutos sin un
+  ciclo correcto (por ejemplo, si `ingest loop` no está en marcha).
+- **SQLite** en modo WAL, para que la API y la ingesta escriban a la vez. En AWS será PostgreSQL.
+
+### `API_BACKEND=mock`: datos ficticios (por defecto)
+
+- En `/docs`, botón **Authorize**: sirve cualquier `client_id` y `client_secret`. El servidor local
+  simula el endpoint de tokens en `/mock/oauth2/token`. Después, *Try it out* en cada endpoint.
+- Con curl o Postman: sirve cualquier `Authorization: Bearer <texto>`. `Bearer token-sin-permiso` devuelve
+  403.
+- Alumnos de ejemplo:
+  - `alumna.ejemplo@example.com`: 3 conversaciones con `OrquestaAYIIPP` y 1 con `AgenteOrquestaGCIN`.
+  - `alumno.demo@example.org`: 1 conversación con `OrquestaAYIIPP`.
+- `synced_at` es fijo y `stale` siempre es `false`.
+
+### Común a los dos modos
+
+- `export_openapi.py` solo genera los archivos de `openapi/`.
+- La especificación del servidor local apunta a sí mismo. La exportada en `openapi/` lleva el dominio de
   producción y el endpoint de tokens de Cognito (provisionales).
-- Alumnos de ejemplo: `alumna.ejemplo@example.com` (3 conversaciones con `OrquestaAYIIPP`, 1 con
-  `AgenteOrquestaGCIN`) y `alumno.demo@example.org` (1 con `OrquestaAYIIPP`).
-- `synced_at` es fijo y `stale` siempre es `false`. No hay límite de peticiones (429 solo documentado).
+- No hay límite de peticiones: el 429 solo está documentado.
 
 ## Decisiones del contrato
 

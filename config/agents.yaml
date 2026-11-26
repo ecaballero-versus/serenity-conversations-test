@@ -17,7 +17,7 @@ agents:
     sync_enabled: false
     retention_days: null
   - agent_code: OrquestaAYIIPP
-    vertical: ayudantes
-    description: Ayudantes
+    vertical: forvide
+    description: Forvide
     sync_enabled: true
     retention_days: null
